@@ -379,9 +379,11 @@ reduce_core:
 opt_set_quantifier: (ALL | DISTINCT)?;
 
 select_core:
-  (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT without_column_list)? (FROM join_source)? (WHERE expr)?
+  (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT without_column_list)? (FROM join_source)? for_as_of_expr? (WHERE expr)?
   group_by_clause? (HAVING expr)? window_clause? ext_order_by_clause?
 ;
+
+for_as_of_expr: FOR identifier AS OF expr;
 
 // ISO/IEC 9075-2:2016(E) 7.7 <row pattern recognition clause>
 row_pattern_recognition_clause: MATCH_RECOGNIZE LPAREN

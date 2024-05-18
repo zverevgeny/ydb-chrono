@@ -1,5 +1,6 @@
 #include "yql_opt_rewrite_io.h"
 #include "yql_expr_optimize.h"
+#include "ydb/library/yql/core/yql_temporal.h"
 
 namespace NYql {
 
@@ -8,9 +9,16 @@ IGraphTransformer::TStatus RewriteIO(const TExprNode::TPtr& input, TExprNode::TP
         return IGraphTransformer::TStatus::Ok;
     }
 
+    TExprNode::TPtr temporalOutput;
+    auto ret = RewriteIOForTemporal(input, temporalOutput, types, ctx);
+    if (ret.Level = IGraphTransformer::TStatus::Ok || ret.HasRestart) {
+        output = temporalOutput;
+        return ret;
+    }
+
     TOptimizeExprSettings settings(nullptr);
     settings.VisitChanges = true;
-    auto ret = OptimizeExpr(input, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
+    ret = OptimizeExpr(temporalOutput, output, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         YQL_ENSURE(node->Type() == TExprNode::Callable);
         if (node->Content() == LeftName || node->Content() == RightName) {
             auto child = node->Child(0);

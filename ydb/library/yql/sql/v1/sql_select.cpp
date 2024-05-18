@@ -1003,7 +1003,29 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
         }
     }
     if (node.HasBlock10()) {
-        auto block = node.GetBlock10();
+        const auto forAsOf = node.GetBlock10().GetRule_for_as_of_expr1();
+        const TString period = Identifier(forAsOf.GetRule_identifier2().GetToken1());
+        TSqlExpression dateExpr(Ctx, Mode);
+        auto date = dateExpr.Build(forAsOf.GetRule_expr5());
+        if (!date) {
+            return nullptr;
+        }
+        TPosition pos(Ctx.Pos());
+
+        TNodePtr forAsOfExpr = BuildBinaryOp(Ctx, pos, "And", 
+            BuildBinaryOp(Ctx, pos, "<=", BuildColumn(pos, period + "_start"), date),
+            BuildBinaryOp(Ctx, pos, "<",  date, BuildColumn(pos, period + "_end"))
+        );
+        if (!forAsOfExpr) {
+            return nullptr;
+        }
+        if (!source->AddFilter(Ctx, forAsOfExpr)) {
+            Ctx.IncrementMonCounter("sql_errors", "WhereNotSupportedBySource");
+            return nullptr;
+        }
+    }
+    else if (node.HasBlock11()) { //TODO merge FOR AS OF and WHERE
+        auto block = node.GetBlock11();
         Token(block.GetToken1());
         TPosition pos(Ctx.Pos());
         TNodePtr where;
@@ -1028,9 +1050,9 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     TLegacyHoppingWindowSpecPtr legacyHoppingWindowSpec;
     bool compactGroupBy = false;
     TString groupBySuffix;
-    if (node.HasBlock11()) {
+    if (node.HasBlock12()) {
         TGroupByClause clause(Ctx, Mode);
-        if (!clause.Build(node.GetBlock11().GetRule_group_by_clause1())) {
+        if (!clause.Build(node.GetBlock12().GetRule_group_by_clause1())) {
             return nullptr;
         }
         bool hasHopping = (bool)clause.GetLegacyHoppingWindow();
@@ -1052,10 +1074,10 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
 
     TNodePtr having;
-    if (node.HasBlock12()) {
+    if (node.HasBlock13()) {
         TSqlExpression expr(Ctx, Mode);
         TColumnRefScope scope(Ctx, EColumnRefState::Allow);
-        having = expr.Build(node.GetBlock12().GetRule_expr2());
+        having = expr.Build(node.GetBlock13().GetRule_expr2());
         if (!having) {
             return nullptr;
         }
@@ -1063,12 +1085,12 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
     }
 
     TWinSpecs windowSpec;
-    if (node.HasBlock13()) {
+    if (node.HasBlock14()) {
         if (source->IsStream()) {
             Ctx.Error() << "WINDOW is not allowed in streaming queries";
             return nullptr;
         }
-        if (!WindowClause(node.GetBlock13().GetRule_window_clause1(), windowSpec)) {
+        if (!WindowClause(node.GetBlock14().GetRule_window_clause1(), windowSpec)) {
             return nullptr;
         }
         Ctx.IncrementMonCounter("sql_features", "WindowClause");
@@ -1076,8 +1098,8 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
 
     bool assumeSorted = false;
     TVector<TSortSpecificationPtr> orderBy;
-    if (node.HasBlock14()) {
-        auto& orderBlock = node.GetBlock14().GetRule_ext_order_by_clause1();
+    if (node.HasBlock15()) {
+        auto& orderBlock = node.GetBlock15().GetRule_ext_order_by_clause1();
         assumeSorted = orderBlock.HasBlock1();
 
         Token(orderBlock.GetRule_order_by_clause2().GetToken1());
@@ -1103,6 +1125,10 @@ TSourcePtr TSqlSelect::SelectCore(const TRule_select_core& node, const TWriteSet
             selectOpOrderBy.swap(orderBy);
             std::swap(selectOpAssumeOrderBy, assumeSorted);
         }
+    }
+
+    if (node.HasBlock15()) {
+        
     }
 
     TVector<TNodePtr> terms;
