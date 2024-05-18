@@ -41,6 +41,8 @@ SRCS(
     yql_opt_window.cpp
     yql_opt_window.h
     yql_statistics.cpp
+    yql_temporal.h
+    yql_temporal.cpp
     yql_type_annotation.cpp
     yql_type_annotation.h
     yql_type_helpers.cpp

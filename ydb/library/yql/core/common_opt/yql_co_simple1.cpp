@@ -9,6 +9,7 @@
 #include <ydb/library/yql/core/yql_opt_window.h>
 #include <ydb/library/yql/core/yql_type_helpers.h>
 #include <ydb/library/yql/core/yql_expr_optimize.h>
+#include <ydb/library/yql/core/yql_temporal.h>
 
 #include <ydb/library/yql/utils/log/log.h>
 #include <ydb/library/yql/parser/pg_catalog/catalog.h>
@@ -3622,6 +3623,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
             return ctx.ChangeChild(*node, 0, ctx.NewCallable(node->Head().Pos(), "Unordered", {node->HeadPtr()}));
         }
 
+        if (auto r = TryRewriteFilterOverIndexedPeriod(node, ctx, optCtx); r != node) {
+            return r;
+        }
+
         YQL_CLOG(DEBUG, Core) << "Canonize " << node->Content();
         return ConvertFilterToFlatmap<TCoFilter, TCoFlatMap>(TCoFilter(node), ctx, optCtx);
     };
@@ -3630,6 +3635,10 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         if (node->Head().IsCallable("Unordered")) {
             YQL_CLOG(DEBUG, Core) << node->Content() << " over " << node->Head().Content();
             return ctx.RenameNode(*node, "Filter");
+        }
+
+        if (auto r = TryRewriteFilterOverIndexedPeriod(node, ctx, optCtx); r != node) {
+            return r;
         }
 
         YQL_CLOG(DEBUG, Core) << "Canonize " << node->Content();

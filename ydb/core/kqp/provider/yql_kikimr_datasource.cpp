@@ -6,6 +6,7 @@
 
 #include <ydb/library/yql/core/yql_expr_optimize.h>
 #include <ydb/library/yql/core/yql_expr_type_annotation.h>
+#include <ydb/library/yql/core/yql_temporal.h>
 #include <ydb/library/yql/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -779,8 +780,29 @@ public:
 
         auto newRead = ctx.RenameNode(*read, newName);
 
-        if (auto maybeRead = TMaybeNode<TKiReadTable>(newRead)) {
-            auto read = maybeRead.Cast();
+        if (auto maybeReadTable = TMaybeNode<TKiReadTable>(newRead)) {
+            auto readTable = maybeReadTable.Cast();
+            if (auto periodIndex = GetPeriodIndexNameFromReadSettings(readTable.Settings().Ptr())) {
+                auto pos = readTable.Raw()->Pos();
+                auto keyItems = readTable.TableKey().Raw()->ChildrenList();
+                keyItems.push_back(
+                    Build<TCoNameValueTuple>(ctx, pos)
+                        .Name().Build("view")
+                        .Value<TCoString>()
+                            .Literal().Build(*periodIndex)
+                            .Build()
+                    .Done().Ptr()
+                );
+                newRead = Build<TKiReadTable>(ctx, pos)
+                    .World(readTable.World())
+                    .DataSource(readTable.DataSource())
+                    .TableKey<TCoKey>()
+                        .Add(keyItems)
+                        .Build()
+                    .Select(readTable.Select())
+                    .Settings(RemovePeriodIndexNameFromReadSettings(readTable.Settings().Ptr(), ctx))
+                .Done().Ptr();
+            }
         }
 
         auto retChildren = node->ChildrenList();
